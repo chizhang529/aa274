@@ -91,7 +91,7 @@ for n in range(n_runs):
     plt.plot(state[n][:,0],state[n][:,1],linewidth=2)
 
 if (n_runs == 2) and dist:
-    plt.legend(['Without noise', 'With noise'])
+    plt.legend(['Without noise', 'With noise'], bbox_to_anchor=(0.01, 0.99), loc=2)
 elif (n_runs == 2) and ~dist:
     plt.legend(['Open-loop', 'Closed-loop'])
 plt.grid('on')
@@ -104,7 +104,7 @@ plt.subplot(2,1,1)
 plt.plot(time[0][0:-1], ctrl[0],linewidth=2)
 plt.grid('on')
 plt.xlabel('Time [s]')
-plt.legend(['V [m/s]', '$\omega$ [rad/s]'])
+plt.legend(['V [m/s]', '$\omega$ [rad/s]'], bbox_to_anchor=(0.01, 0.99), loc=2)
 if dist: plt.title('Without noise')
 else: plt.title('Open-loop')
 
@@ -113,7 +113,7 @@ if n_runs == 2:
     plt.plot(time[1][0:-1], ctrl[1],linewidth=2)
     plt.grid('on')
     plt.xlabel('Time [s]')
-    plt.legend(['V [m/s]', '$\omega$ [rad/s]'])
+    plt.legend(['V [m/s]', '$\omega$ [rad/s]'], bbox_to_anchor=(0.01, 0.99), loc=2)
     if dist: plt.title('With noise')
     else: plt.title('Closed-loop')
 
