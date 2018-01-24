@@ -97,7 +97,7 @@ echo "Querying Stanford server (AFS) to determine submission number; enter SUNet
 ssh_result=$(ssh -o NumberOfPasswordPrompts=1 -o ControlMaster=auto -o ControlPersist=yes -o ControlPath=~/.ssh/%r@%h:%p $sunetid@cardinal.stanford.edu ls -t /afs/ir/class/aa274/HW1 2>/dev/null)
 ssh_success=$?
 lastsub=$(echo ${ssh_result} | tr ' ' '\n' | grep -m 1 ${sunetid}_hw1_submission_[0-9]*.zip | grep -Eo 'submission_[0-9]{1,4}' | grep -Eo '[0-9]{1,4}') # very unorthodox
-if [ $ssh_success -ne "0" ]; then
+if [ $ssh_success -eq "255" ]; then
     tput setaf 1
     tput bold
     echo "
@@ -116,10 +116,10 @@ subnum=$((lastsub + 1))
 echo "Copying to AFS (running command below); enter SUNetID password if prompted."
 set -x
 scp -o NumberOfPasswordPrompts=1 -o ControlMaster=auto -o ControlPersist=yes -o ControlPath=~/.ssh/%r@%h:%p "${sunetid}_hw1.zip" "$sunetid@cardinal.stanford.edu:/afs/ir/class/aa274/HW1/${sunetid}_hw1_submission_$subnum.zip" 2>/dev/null
+ssh_success=$?
 { set +x; } 2>/dev/null
 
-ssh_success=$?
-if [ $ssh_success -ne "0" ]; then
+if [ $ssh_success -eq "255" ]; then
     tput setaf 1
     tput bold
     echo "
