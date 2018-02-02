@@ -247,6 +247,7 @@ class CameraCalibrator:
         X = []
         Y = []
         
+        # set the bottom left corner as the origin, x-axis pointing right, y-axis pointing up
         row_coords = np.linspace(0., self.d_square*(self.n_corners_x-1), num=self.n_corners_x)
         col_coords = np.linspace(0., self.d_square*(self.n_corners_y-1), num=self.n_corners_y).reshape(self.n_corners_y, 1)
         col_coords = col_coords[-1, :] - col_coords
