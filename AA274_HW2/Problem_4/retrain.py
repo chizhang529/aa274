@@ -1183,8 +1183,8 @@ def main(_):
       f.write('\n'.join(image_lists.keys()) + '\n')
 
 
-# MODEL_TYPE = 'inception_v3'
-MODEL_TYPE = 'mobilenet_0.50_224'
+MODEL_TYPE = 'inception_v3'
+# MODEL_TYPE = 'mobilenet_0.50_224'
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument(
