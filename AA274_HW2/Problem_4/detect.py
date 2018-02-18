@@ -1,6 +1,7 @@
 import argparse
 import numpy as np
 import tensorflow as tf
+import cv2
 from utils import *
 
 GRAPH = 'retrained_graph.pb'
@@ -9,20 +10,23 @@ with open('labels.txt', 'r') as f:
 
 def compute_brute_force_classification(image_path, nH=8, nW=8):
     raw_image = decode_jpeg(image_path)    # H x W x 3 numpy array (3 for each RGB color channel)
+    H, W, _ = raw_image.shape
+    dh, dw = np.floor(float(H)/float(nH)), np.floor(float(W)/float(nW))
 
-    #### EDIT THIS CODE
-
+    pad_width = 40
+    padded_image = np.pad(raw_image, ((pad_width, pad_width), (pad_width, pad_width), (0,0)), mode='constant')
+    predictions = np.empty((nH, nW, 3))
+    
     with tf.Session() as sess:
-        window = raw_image    # the "window" here is the whole image
-        window_prediction = classify_image(window, sess)
-
-    # setting each window prediction to be the prediction for the whole image (just for something to plot)
-    # do not turn this code in and claim that "your window padding is infinite"
-    window_predictions = np.array([[window_prediction for c in range(nW)] for r in range(nH)])
-
-    ####
-
-    return np.squeeze(np.array(predictions))
+        for i in range(nH):
+            for j in range(nW):
+                window = padded_image[int(i*dh):int((i+1)*dh+2*pad_width), int(j*dw):int((j+1)*dw+2*pad_width), :]
+                # send patches to model
+                window_prediction = classify_image(window, sess)
+                predictions[i, j, :] = window_prediction # P[('neg', 'dog', 'cat')]
+    
+    assert predictions.shape == (nH, nW, 3)
+    return predictions
 
 def compute_convolutional_KxK_classification(image):
     graph = tf.get_default_graph()
@@ -44,14 +48,16 @@ def compute_and_plot_saliency(image):
     with tf.Session() as sess:
         logits = np.squeeze(run_with_image_input(logits_tensor, image, sess))
         top_class = np.argmax(logits)
+        # derivatives are of the same size as image
         w_ijc = gradient_of_class_score_with_respect_to_input_image(image, top_class, sess)    # defined in utils.py
     
-    #### EDIT THIS CODE
-    
-    M = np.zeros(raw_gradients.shape[0:2])  # something of the right shape to plot
+    H, W, _ = w_ijc.shape
+    M = np.empty((H, W))
+    for i in range(H):
+        for j in range(W):
+            M[i, j] = np.max(np.absolute(w_ijc[i, j, :]))
 
-    ####
-
+    # plot saliency map
     plt.subplot(2,1,1)
     plt.imshow(M)
     plt.title('Saliency with respect to predicted class %s' % LABELS[top_class])
