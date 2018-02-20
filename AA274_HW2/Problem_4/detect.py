@@ -10,6 +10,7 @@ with open('labels.txt', 'r') as f:
 
 def compute_brute_force_classification(image_path, nH=8, nW=8):
     raw_image = decode_jpeg(image_path)    # H x W x 3 numpy array (3 for each RGB color channel)
+    # CODE HERE
     H, W, _ = raw_image.shape
     dh, dw = np.floor(float(H)/float(nH)), np.floor(float(W)/float(nW))
 
@@ -26,6 +27,7 @@ def compute_brute_force_classification(image_path, nH=8, nW=8):
                 predictions[i, j, :] = window_prediction # P[('neg', 'dog', 'cat')]
     
     assert predictions.shape == (nH, nW, 3)
+    # CODE HERE
     return predictions
 
 def compute_convolutional_KxK_classification(image):
@@ -51,12 +53,10 @@ def compute_and_plot_saliency(image):
         # derivatives are of the same size as image
         w_ijc = gradient_of_class_score_with_respect_to_input_image(image, top_class, sess)    # defined in utils.py
     
-    H, W, _ = w_ijc.shape
-    M = np.empty((H, W))
-    for i in range(H):
-        for j in range(W):
-            M[i, j] = np.max(np.absolute(w_ijc[i, j, :]))
-
+    # CODE HERE
+    M = np.amax(np.abs(w_ijc), axis=2)
+    # CODE HERE
+    
     # plot saliency map
     plt.subplot(2,1,1)
     plt.imshow(M)
