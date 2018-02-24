@@ -18,10 +18,10 @@ class EKF(object):
     # OUTPUT: none (internal belief state (self.x, self.P) should be updated)
     def transition_update(self, u, dt):
         g, Gx, Gu = self.transition_model(u, dt)
-
-        #### TODO ####
+        # TODO #
         # update self.x, self.P
-        ##############
+        self.x = g
+        self.P = np.matmul(np.matmul(Gx, self.P), Gx.T) + dt * np.matmul(np.matmul(Gu, self.Q), Gu.T)
 
     # Propagates exact (nonlinear) state dynamics; also returns associated Jacobians for EKF linearization
     # INPUT:  (u, dt)
@@ -44,9 +44,11 @@ class EKF(object):
         if z is None:    # don't update if measurement is invalid (e.g., no line matches for line-based EKF localization)
             return
 
-        #### TODO ####
         # update self.x, self.P
-        ##############
+        sigma = np.matmul(np.matmul(H, self.P), H.T) + R
+        K = np.matmul(np.matmul(self.P, H.T), np.linalg.inv(sigma))
+        self.x = self.x + K.dot(z).flatten()
+        self.P = self.P - np.matmul(np.matmul(K, sigma), K.T)
 
     # Converts raw measurement into the relevant Gaussian form (e.g., a dimensionality reduction);
     # also returns associated Jacobian for EKF linearization
@@ -72,12 +74,39 @@ class Localization_EKF(EKF):
     # Unicycle dynamics (Turtlebot 2)
     def transition_model(self, u, dt):
         v, om = u
-        x, y, th = self.x
-
-        #### TODO ####
+        x, y, th = self.x  # [x_(t-1), y_(t-1), theta_(t-1)]
+        
+        # TODO #
         # compute g, Gx, Gu
-        ##############
-
+        if abs(om) > 1e-5:  
+            xt = x + v/om*(np.sin(th+om*dt) - np.sin(th))
+            yt = y - v/om*(np.cos(th+om*dt) - np.cos(th))
+            th_t = th + om*dt
+            g = np.array([xt, yt, th_t])
+            
+            Gx = np.array([[1., 0., v/om*(np.cos(th+om*dt) - np.cos(th))],
+                           [0., 1., v/om*(np.sin(th+om*dt) - np.sin(th))],
+                           [0., 0., 1.]])
+        
+            dx_om = v/(om**2)*(np.sin(th) - np.sin(th+om*dt)) + v*dt/om*np.cos(th+om*dt)
+            dy_om = v/(om**2)*(np.cos(th+om*dt) - np.cos(th)) + v*dt/om*np.sin(th+om*dt)
+            Gu = np.array([[ 1./om*(np.sin(th+om*dt) - np.sin(th)), dx_om],
+                           [-1./om*(np.cos(th+om*dt) - np.cos(th)), dy_om],
+                           [0., dt]])
+        else:  # L'Hospital's rule
+            xt = x + v*np.cos(th)*dt
+            yt = y + v*np.sin(th)*dt
+            th_t = th
+            g = np.array([xt, yt, th_t])
+            
+            Gx = np.array([[1., 0., -v*dt*np.sin(th)],
+                           [0., 1., v*dt*np.cos(th)],
+                           [0., 0., 1.]])
+                           
+            Gu = np.array([[np.cos(th)*dt, -v/2*(dt**2)*np.sin(th)],
+                           [np.sin(th)*dt, v/2*(dt**2)*np.cos(th)],
+                           [0., dt]])
+        
         return g, Gx, Gu
 
     # Given a single map line m in the world frame, outputs the line parameters in the scanner frame so it can
@@ -90,10 +119,21 @@ class Localization_EKF(EKF):
     def map_line_to_predicted_measurement(self, m):
         alpha, r = m
 
-        #### TODO ####
         # compute h, Hx
-        ##############
-
+        x, y, theta = self.x 
+        x_cam, y_cam, theta_cam = self.tf_base_to_camera  # camera location in robot frame
+        # compute camera location in world frame
+        T_bot_to_w = np.array([[np.cos(theta), -np.sin(theta), x],
+                               [np.sin(theta),  np.cos(theta), y],
+                               [0., 0., 1.]])
+        x_cam_w, y_cam_w, _ = T_bot_to_w.dot(np.array([x_cam, y_cam, 1.]))
+        
+        h = np.array([alpha - theta - theta_cam,
+                      r - x_cam_w*np.cos(alpha) - y_cam_w*np.sin(alpha)])
+        
+        Hx = np.array([[0., 0., -1.],
+                       [-np.cos(alpha), -np.sin(alpha), (y_cam*np.cos(alpha)-x_cam*np.sin(alpha))*np.cos(theta) + (x_cam*np.cos(alpha)+y_cam*np.sin(alpha))*np.sin(theta)]])
+        
         flipped, h = normalize_line_parameters(h)
         if flipped:
             Hx[1,:] = -Hx[1,:]
@@ -110,11 +150,33 @@ class Localization_EKF(EKF):
     #  R_list - list of len(v_list) covariance matrices of the innovation vectors (from scanner uncertainty)
     #  H_list - list of len(v_list) Jacobians of the innovation vectors with respect to the belief mean self.x
     def associate_measurements(self, rawZ, rawR):
-
-        #### TODO ####
         # compute v_list, R_list, H_list
-        ##############
+        v_list, R_list, H_list = [], [], []
+        num_meas = rawZ.shape[1]
+        num_map_lines = self.map_lines.shape[1]
+        
+        for i in range(num_meas):
+            zi = rawZ[:, i]
+            Ri = rawR[i]
+            # record data
+            d_min = self.g**2
+            v, R, H = None, None, None
+            for j in range(num_map_lines):
+                hj, Hj = self.map_line_to_predicted_measurement(self.map_lines[:, j])
 
+                vij = zi - hj
+                Sij = np.matmul(np.matmul(Hj, self.P), Hj.T) + Ri
+                dij = np.matmul(np.matmul(vij.T, np.linalg.inv(Sij)), vij)
+
+                if dij < d_min:
+                    d_min = dij
+                    v, R, H = vij, Ri, Hj
+
+            if d_min < self.g**2:
+                v_list.append(v)
+                R_list.append(R)
+                H_list.append(H)
+                
         return v_list, R_list, H_list
 
     # Assemble one joint measurement, covariance, and Jacobian from the individual values corresponding to each
@@ -124,11 +186,13 @@ class Localization_EKF(EKF):
         if not v_list:
             print "Scanner sees", rawZ.shape[1], "line(s) but can't associate them with any map entries"
             return None, None, None
-
-        #### TODO ####
+        
+        if len(v_list) == 0:
+            return None, None, None
         # compute z, R, H
-        ##############
-
+        z = np.array(v_list).reshape(-1, 1)
+        R = scipy.linalg.block_diag(*R_list)
+        H = np.array(H_list).reshape(-1, H_list[0].shape[1])
         return z, R, H
 
 
