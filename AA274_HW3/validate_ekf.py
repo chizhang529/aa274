@@ -230,4 +230,4 @@ if __name__ == '__main__':
 
     ### PROBLEM 2
 
-    # validate_SLAM_EKF()
+    validate_SLAM_EKF()
