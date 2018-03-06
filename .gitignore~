@@ -1,0 +1,5 @@
+*.pyc
+*.zip
+*.pb
+.ipynb_checkpoints
+retrain_logs
