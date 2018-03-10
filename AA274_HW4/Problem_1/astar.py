@@ -72,8 +72,19 @@ class AStar(object):
     #           x - tuple state
     # OUTPUT: List of neighbors that are free, as a list of TUPLES
     def get_neighbors(self, x):
-        # TODO: fill me in!
-
+        x0, y0 = x
+        delta = self.resolution
+        dx = [0., 0., -delta, delta, delta, delta, -delta, -delta]
+        dy = [-delta, delta, 0., 0., -delta, delta, -delta, delta]
+        
+        neighbors = []
+        for i in range(8):
+            neighbor = self.snap_to_grid((x0+dx[i], y0+dy[i]))
+            if self.is_free(neighbor):
+                neighbors.append(neighbor)
+        
+        return neighbors
+        
     # Gets the state in open_set that has the lowest f_score
     # INPUT: None
     # OUTPUT: A tuple, the state found in open_set that has the lowest f_score
@@ -119,9 +130,29 @@ class AStar(object):
     # INPUT: None
     # OUTPUT: Boolean, True if a solution from x_init to x_goal was found
     def solve(self):
-        while len(self.open_set)>0:
-            # TODO: fill me in!
-
+        while len(self.open_set) > 0:
+            curr = self.find_best_f_score()
+            if curr == self.x_goal:
+                self.path = self.reconstruct_path()
+                return True
+        
+            self.open_set.remove(curr)
+            self.closed_set.append(curr)
+            
+            for neighbor in self.get_neighbors(curr):
+                if neighbor in self.closed_set:
+                    continue
+                
+                g = self.g_score[curr] + self.distance(curr, neighbor)
+                if neighbor not in self.open_set:
+                    self.open_set.append(neighbor)
+                elif g > self.g_score[neighbor]:
+                    continue
+                    
+                self.came_from[neighbor] = curr
+                self.g_score[neighbor] = g
+                self.f_score[neighbor] = g + self.distance(neighbor, self.x_goal) 
+                     
         return False
 
 # A 2D state space grid with a set of rectangular obstacles. The grid is fully deterministic
