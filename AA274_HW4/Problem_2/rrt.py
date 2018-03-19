@@ -1,3 +1,4 @@
+import random
 import numpy as np
 import matplotlib.pyplot as plt
 from dubins import path_length, path_sample
@@ -25,7 +26,7 @@ class RRT(object):
 
     # Given a list of states V and a query state x, returns the index (row) of V such that the
     # steering distance (subject to robot dynamics) from V[i] to x is minimized
-    # INPUT: (obstacles, x1, x2)
+    # INPUT: (V, x)
     #           V - list/np.array of states ("samples")
     #           x - query state
     # OUTPUT: Integer index of nearest point in V to x
@@ -35,14 +36,27 @@ class RRT(object):
     # Steers from x towards y along the shortest path (subject to robot dynamics); returns y if
     # the length of this shortest path is less than eps, otherwise returns the point at distance
     # eps along the path from x to y.
-    # INPUT: (obstacles, x1, x2)
+    # INPUT: (x, y, eps)
     #           x - start state
     #           y - target state
     #         eps - maximum steering distance
     # OUTPUT: State (numpy vector) resulting from bounded steering
     def steer_towards(self, x, y, eps):
         raise NotImplementedError("steer_towards must be overriden by a subclass of RRT")
-
+    
+    # Reconstruct a path from the initial location to the goal location
+    # INPUT: (nodes, edges)
+    # OUTPUT: A list of numpy arrays, which is a list of the states that go from init to goal
+    def reconstruct_path(self, nodes, edges):
+        path = [self.x_goal]
+        next_idx = edges[-1]
+        while next_idx != -1:
+            path.append(nodes[next_idx])
+            next_idx = edges[next_idx]
+        
+        assert((path[-1] == self.x_init).all())
+        return list(reversed(path))
+        
     # Constructs an RRT rooted at self.x_init with the aim of producing a dynamically-feasible
     # and obstacle-free trajectory from self.x_init to self.x_goal.
     # INPUT: (eps, max_iters, goal_bias):
@@ -65,7 +79,7 @@ class RRT(object):
         # P[1] = 0 since the parent of the first additional state added to the RRT must have been
         # extended from the root, in general 0 <= P[i] < i for all i < n
         P = -np.ones(max_iters, dtype=int)
-
+        
         ## Intermediate Outputs
         # You must update and/or populate:
         #    - V, P, n: the represention of the planning tree
@@ -73,8 +87,33 @@ class RRT(object):
         #    - solution_path: if success is True, then must contain list of states (tree nodes)
         #          [x_init, ..., x_goal] such that the global trajectory made by linking steering
         #          trajectories connecting the states in order is obstacle-free.
-
-        # TODO: fill me in!
+        success = False
+        solution_path = []
+            
+        for k in range(max_iters):
+            z = np.random.uniform(0.0, 1.0, 1)
+            if z < goal_bias:
+                x_rand = self.x_goal
+            else:
+                x_rand = np.zeros(state_dim)
+                for i in range(state_dim):
+                    x_rand[i] = np.random.uniform(self.statespace_lo[i], self.statespace_hi[i], 1)
+                x_rand = np.array(x_rand)
+            
+            near_idx = self.find_nearest(V[:n], x_rand)
+            
+            x_near = V[near_idx, :]
+            x_new = self.steer_towards(x_near, x_rand, eps)
+            
+            if self.is_free_motion(self.obstacles, x_near, x_new):
+                V[n, :] = x_new
+                P[n] = near_idx
+                n += 1
+                if np.linalg.norm(x_new[:2] - self.x_goal[:2]) <= 0.3:
+                    success = True
+                    # reconstruct path
+                    solution_path = self.reconstruct_path(V[:n], P[:n])
+                    break
 
         plt.figure()
         plot_line_segments(self.obstacles, color="red", linewidth=2, label="obstacles")
@@ -93,10 +132,16 @@ class RRT(object):
 class GeometricRRT(RRT):
 
     def find_nearest(self, V, x):
-        # TODO: fill me in!
+        dist = np.sum((V-x)**2, axis=1)
+        return np.argmin(dist)
 
     def steer_towards(self, x, y, eps):
-        # TODO: fill me in!
+        dist = np.linalg.norm(y - x)
+        if dist <= eps:
+            return y
+        else:
+            unit_vec = (y-x) / dist
+            return x + eps*unit_vec          
 
     def is_free_motion(self, obstacles, x1, x2):
         motion = np.array([x1, x2])
@@ -127,15 +172,23 @@ class DubinsRRT(RRT):
         super(self.__class__, self).__init__(statespace_lo, statespace_hi, x_init, x_goal, obstacles)
 
     def find_nearest(self, V, x):
-        # TODO: fill me in!
+        dist = np.zeros(V.shape[0])
+        for i in range(V.shape[0]):
+            dist[i] = path_length(V[i, :], x, self.turning_radius)
+
+        return np.argmin(dist)
 
     def steer_towards(self, x, y, eps):
-        # TODO: fill me in!
         # A subtle issue: if you use dubins.path_sample to return the point at distance
         # eps along the path from x to y, use a turning radius slightly larger than
         # self.turning_radius (i.e., 1.001*self.turning_radius). Without this hack,
         # dubins.path_sample might return a point that you can't quite get to in distance
         # eps (using self.turning_radius) due to numerical precision issues.
+        dubins_samples = path_sample(x, y, 1.001*self.turning_radius, eps)
+        if len(dubins_samples[0]) <= 2:
+            return x
+        else:
+            return dubins_samples[0][1]
 
     def is_free_motion(self, obstacles, x1, x2, resolution = np.pi/6):
         pts = path_sample(x1, x2, self.turning_radius, self.turning_radius*resolution)[0]
@@ -148,7 +201,7 @@ class DubinsRRT(RRT):
 
     def plot_tree(self, V, P, resolution = np.pi/24, **kwargs):
         line_segments = []
-        for i in range(V.shape[0]):
+        for i in range(len(V)):
             if P[i] >= 0:
                 pts = path_sample(V[P[i],:], V[i,:], self.turning_radius, self.turning_radius*resolution)[0]
                 pts.append(V[i,:])
@@ -158,7 +211,7 @@ class DubinsRRT(RRT):
 
     def plot_path(self, V, resolution = np.pi/24, **kwargs):
         pts = []
-        for i in range(V.shape[0] - 1):
+        for i in range(len(V) - 1):
             pts.extend(path_sample(V[i], V[i+1], self.turning_radius, self.turning_radius*resolution)[0])
         plt.plot([x for x, y, th in pts], [y for x, y, th in pts], **kwargs)
 
