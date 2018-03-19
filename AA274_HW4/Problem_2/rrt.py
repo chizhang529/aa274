@@ -109,7 +109,7 @@ class RRT(object):
                 V[n, :] = x_new
                 P[n] = near_idx
                 n += 1
-                if np.linalg.norm(x_new[:2] - self.x_goal[:2]) <= 0.3:
+                if np.linalg.norm(x_new[:2] - self.x_goal[:2]) <= 0.1:
                     success = True
                     # reconstruct path
                     solution_path = self.reconstruct_path(V[:n], P[:n])
@@ -186,7 +186,7 @@ class DubinsRRT(RRT):
         # eps (using self.turning_radius) due to numerical precision issues.
         dubins_samples = path_sample(x, y, 1.001*self.turning_radius, eps)
         if len(dubins_samples[0]) <= 2:
-            return x
+            return y
         else:
             return dubins_samples[0][1]
 
